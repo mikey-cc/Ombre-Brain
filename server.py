@@ -1061,7 +1061,17 @@ async def trace(
         else:
             changed += " → 已取消隐藏，重新参与浮现"
     return f"已修改记忆桶 {bucket_id}: {changed}"
-
+# ========================================================
+# 工具 read_profile 一读取人设与NSFW设定
+# ========================================================
+@mcp.tool()
+async def read_profile() -> str:
+    """读取人设文件和NSFW设定。每次开新窗口时调用。"""
+    try:
+        with open('/app/buckets/permanent/未分类/1b6cc5e9aacb.md', 'r', encoding='utf-8') as f:
+            return f.read()
+    except Exception as e:
+        return f"读取失败：{e}"
 
 # =============================================================
 # Tool 5: pulse — Heartbeat, system status + memory listing
