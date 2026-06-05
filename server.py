@@ -1261,16 +1261,6 @@ async def dream() -> str:
 # ===========================================================
 # 工具 read_profile — 读取人设与NSFW设定
 # ===========================================================
-@mcp.tool()
-async def read_profile() -> str:
-    """读取人设文件和NSFW设定。每次开新窗口时调用。"""
-    try:
-        result = await bucket_mgr.get
-        if result:
-            return result.get("content", "桶内容为空。")
-        return "未找到人设桶。"
-    except Exception as e:
-        return f"读取失败：{e}"
 
 # =============================================================
 # Dashboard API endpoints (for lightweight Web UI)
