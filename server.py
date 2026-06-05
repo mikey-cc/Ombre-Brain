@@ -1265,7 +1265,7 @@ async def dream() -> str:
 async def read_profile() -> str:
     """读取人设文件和NSFW设定。每次开新窗口时调用。"""
     try:
-        result = await bucket_mgr.get_bucket("1b6cc5e9aacb")
+        result = await bucket_mgr.get
         if result:
             return result.get("content", "桶内容为空。")
         return "未找到人设桶。"
