@@ -1258,7 +1258,17 @@ async def dream() -> str:
     await _fire_webhook("dream", {"recent": len(recent), "chars": len(final_text)})
     return final_text
 
-
+# ========================================================
+# 工具 read_profile 一读取人设与NSFW设定
+# ========================================================
+@mcp.tool()
+async def read_profile() -> str:
+    """读取人设文件和NSFW设定。每次开新窗口时调用。"""
+    try:
+        with open('/app/buckets/permanent/未分类/1b6cc5e9aacb.md', 'r', encoding='utf-8') as f:
+            return f.read()
+    except Exception as e:
+        return f"读取失败：{e}"
 # =============================================================
 # Dashboard API endpoints (for lightweight Web UI)
 # 仪表板 API（轻量 Web UI 用）
