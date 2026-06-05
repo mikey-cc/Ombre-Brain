@@ -1265,11 +1265,10 @@ async def dream() -> str:
 async def read_profile() -> str:
     """读取人设文件和NSFW设定。每次开新窗口时调用。"""
     try:
-        with open('/app/profile.txt', 'r', encoding='utf-8') as f:
-            content = f.read()
-        return content
-    except FileNotFoundError:
-        return "profile.txt 不存在。"
+        result = await bucket_mgr.get_bucket("1b6cc5e9aacb")
+        if result:
+            return result.get("content", "桶内容为空。")
+        return "未找到人设桶。"
     except Exception as e:
         return f"读取失败：{e}"
 
