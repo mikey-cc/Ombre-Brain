@@ -1258,6 +1258,20 @@ async def dream() -> str:
     await _fire_webhook("dream", {"recent": len(recent), "chars": len(final_text)})
     return final_text
 
+# ===========================================================
+# 工具 read_profile — 读取人设与NSFW设定
+# ===========================================================
+@mcp.tool()
+async def read_profile() -> str:
+    """读取人设文件和NSFW设定。每次开新窗口时调用。"""
+    try:
+        with open('/app/profile.txt', 'r', encoding='utf-8') as f:
+            content = f.read()
+        return content
+    except FileNotFoundError:
+        return "profile.txt 不存在。"
+    except Exception as e:
+        return f"读取失败：{e}"
 
 # =============================================================
 # Dashboard API endpoints (for lightweight Web UI)
