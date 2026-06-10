@@ -504,28 +504,91 @@ class Dehydrator:
     # For the "grow" tool — "dump a day's content and it gets organized"
     # 给 grow 工具用，"一天结束发一坨内容"靠这个
     # ---------------------------------------------------------
+    # Max characters per digest API call. Long content is split into chunks so
+    # we never (a) silently drop the tail by truncation, nor (b) overflow the
+    # model's output token budget with one giant JSON array (which gets cut off
+    # mid-array and fails to parse → the old "日记整理返回空结果" bug).
+    # 每次整理调用的最大字符数。长内容分块处理，既不截断丢尾，也不会把输出撑爆。
+    DIGEST_CHUNK_CHARS = 1800
+
     async def digest(self, content: str) -> list[dict]:
         """
         Split a large chunk of daily content into independent memory entries.
         将一大段日常内容拆分成多个独立记忆条目。
+
+        Long content is chunked; if a chunk fails to organize, its raw text is
+        kept as a single entry so content is never lost.
+        长内容自动分块；某块整理失败则原文兜底存为一条，绝不丢内容。
 
         Returns: [{"name", "content", "domain", "valence", "arousal", "tags", "importance"}, ...]
         """
         if not content or not content.strip():
             return []
 
-        # --- API digest (no local fallback) ---
+        # --- API digest required (the LLM call has no local fallback) ---
         if not self.api_available:
             raise RuntimeError("脱水 API 不可用，请检查 config.yaml 中的 dehydration 配置")
-        try:
-            result = await self._api_digest(content)
-            if result:
-                return result
-            raise RuntimeError("API 日记整理返回空结果")
-        except RuntimeError:
-            raise
-        except Exception as e:
-            raise RuntimeError(f"API 日记整理失败，请检查 API 连接: {e}") from e
+
+        all_items: list[dict] = []
+        for chunk in self._chunk_for_digest(content):
+            try:
+                items = await self._api_digest(chunk)
+            except Exception as e:
+                logger.warning(f"Digest chunk failed, raw fallback / 分块整理失败，原文兜底: {e}")
+                items = []
+            # Never lose content: if a chunk can't be organized, store it raw.
+            # 绝不丢内容：某块整理不出来就把原文直接存成一条。
+            all_items.extend(items if items else [self._raw_fallback_item(chunk)])
+
+        return all_items
+
+    def _chunk_for_digest(self, content: str) -> list[str]:
+        """
+        Split long content into <=DIGEST_CHUNK_CHARS pieces on paragraph
+        boundaries, hard-splitting any oversized paragraph.
+        按段落边界把长内容切成不超过上限的小块，超长段落再硬切。
+        """
+        content = content.strip()
+        if len(content) <= self.DIGEST_CHUNK_CHARS:
+            return [content]
+
+        chunks: list[str] = []
+        buf = ""
+        for para in re.split(r"\n\s*\n", content):
+            para = para.strip()
+            if not para:
+                continue
+            if len(para) > self.DIGEST_CHUNK_CHARS:
+                if buf:
+                    chunks.append(buf)
+                    buf = ""
+                for i in range(0, len(para), self.DIGEST_CHUNK_CHARS):
+                    chunks.append(para[i:i + self.DIGEST_CHUNK_CHARS])
+                continue
+            if buf and len(buf) + len(para) + 2 > self.DIGEST_CHUNK_CHARS:
+                chunks.append(buf)
+                buf = para
+            else:
+                buf = f"{buf}\n\n{para}" if buf else para
+        if buf:
+            chunks.append(buf)
+        return chunks
+
+    @staticmethod
+    def _raw_fallback_item(chunk: str) -> dict:
+        """Keep a chunk verbatim when the LLM digest fails. 整理失败时原文兜底。"""
+        text = chunk.strip()
+        lines = text.splitlines()
+        name = (lines[0].strip() if lines else text)[:20]
+        return {
+            "name": name,
+            "content": text,
+            "domain": ["未分类"],
+            "valence": 0.5,
+            "arousal": 0.3,
+            "tags": [],
+            "importance": 5,
+        }
 
     # ---------------------------------------------------------
     # API call: diary digest
@@ -536,13 +599,16 @@ class Dehydrator:
         Call LLM API for diary organization.
         调用 LLM API 执行日记整理。
         """
+        # content is pre-chunked by digest() to <=DIGEST_CHUNK_CHARS, so no
+        # truncation here; max_tokens raised to fit a full 2~6 item JSON array.
+        # 内容已由 digest() 预先分块，这里不再截断；输出上限提高以容纳完整 JSON。
         response = await self.client.chat.completions.create(
             model=self.model,
             messages=[
                 {"role": "system", "content": DIGEST_PROMPT},
-                {"role": "user", "content": content[:5000]},
+                {"role": "user", "content": content},
             ],
-            max_tokens=2048,
+            max_tokens=4096,
             temperature=0.0,
         )
         if not response.choices:
